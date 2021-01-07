@@ -13,13 +13,14 @@ import pycparser.c_parser as c_parser
 # to do: using pow in reverse dif. might slow down.
 
 class Expr(pycparser.c_ast.Node):
-    def __init__(self,node):
+    def __init__(self,node,differentiate_pow_exp=True):
         if isinstance(node, str):
             self.ast = node
             self.type = 'str'
         else:
             self.ast = node
             self.type = node.__class__.__name__
+        self.differentiate_pow_exp = differentiate_pow_exp
 
     def eval(self):
         if self.type=='UnaryOp':
@@ -184,7 +185,7 @@ class Expr(pycparser.c_ast.Node):
         return Divide()
 
     def __pow__(self):
-        return Pow()
+        return Pow(self.differentiate_pow_exp)
 
     def __sin__(self):
         return Sine()
@@ -359,8 +360,8 @@ class Log(Expr):
 
 
 class Pow(Expr):
-    def __init__(self):
-        pass
+    def __init__(self,differentiate_pow_exp):
+        self.differentiate_pow_exp = differentiate_pow_exp
     def _eval(self,cur_node):
         try:
             base = cur_node.ast.args.exprs[0].name
@@ -395,10 +396,11 @@ class Pow(Expr):
         der_base = base._forward_diff()
 
         der_exp = exp._forward_diff()
-
-        return "(pow("+base_str+",("+exp_str+"-1)) * "+\
-                "("+exp_str+ " * "+ der_base +" + "+base_str+ " * "+ der_exp+ " * log("+base_str+")))"
-
+        if self.differentiate_pow_exp:
+            return "(pow("+base_str+",("+exp_str+"-1)) * "+\
+                    "("+exp_str+ " * "+ der_base +" + "+base_str+ " * "+ der_exp+ " * log("+base_str+")))"
+        else:
+            return "(pow("+base_str+",("+exp_str+"-1)) * "+"("+exp_str+ " * "+ der_base +"))"
 
     def _reverse_diff(self, cur_node, adjoint, grad):
         try:
@@ -416,7 +418,8 @@ class Pow(Expr):
             exp_str =  exp.eval()
 
         Expr(base)._reverse_diff( "(" + adjoint + ")"+ "*"+ "("+ exp_str+")"+" * " + "(pow(" + base_str +","+ "("+exp_str +"- 1)"+"))", grad)
-        Expr(exp)._reverse_diff("(" +  adjoint + ")"+ "*"+ "log("+base_str+")" +" * " + "pow(" + base_str +"," + exp_str +")", grad)
+        if self.differentiate_pow_exp:
+            Expr(exp)._reverse_diff("(" +  adjoint + ")"+ "*"+ "log("+base_str+")" +" * " + "pow(" + base_str +"," + exp_str +")", grad)
 
 
 class Sqrt(Expr):
@@ -600,7 +603,8 @@ def expand_equation(equation, dict_):
 
 def grad(ast, expression, variables, func = 'function',
                           reverse_diff = False, second_der = False, output_filename = 'c_code',
-                          output_func = 'compute', parallel = False, num_threads = 1):
+                          output_func = 'compute', parallel = False, num_threads = 1,
+                          differentiate_pow_exp = True):
     """
     Returns a function which computes gradient of `fun` with respect to
     positional argument number `x`. The returned function takes the
@@ -713,7 +717,7 @@ def grad(ast, expression, variables, func = 'function',
 
     if reverse_diff:
         if second_der:
-            Expr(fun)._reverse_diff("1.",grad)
+            Expr(fun,differentiate_pow_exp=differentiate_pow_exp)._reverse_diff("1.",grad)
 
 
             ctr=0
@@ -733,7 +737,7 @@ def grad(ast, expression, variables, func = 'function',
                 for i_ctr, vars_ in enumerate(variables):
                     grad_hess[vars_] = '0'
 
-                Expr(new_ast.ext[0].init)._reverse_diff("1.",grad_hess)
+                Expr(new_ast.ext[0].init,differentiate_pow_exp=differentiate_pow_exp)._reverse_diff("1.",grad_hess)
 
                 for j in range(i, len(variables)):
 
@@ -748,7 +752,7 @@ def grad(ast, expression, variables, func = 'function',
 
 
         else:
-            Expr(fun)._reverse_diff("1.",grad)
+            Expr(fun,differentiate_pow_exp=differentiate_pow_exp)._reverse_diff("1.",grad)
             
             i = 0
             for k,v in grad.items():
@@ -774,7 +778,7 @@ def grad(ast, expression, variables, func = 'function',
                 curr_base_variable = Variable(vars_second)
                 secondary_base_variable = Variable(vars_second)
 
-                second_derivative = Expr(new_ast.ext[0].init)._forward_diff()
+                second_derivative = Expr(new_ast.ext[0].init,differentiate_pow_exp=differentiate_pow_exp)._forward_diff()
                 c_code._generate_expr([primary_base_variable._get(), secondary_base_variable._get()], second_derivative,index=ctr, file_pointer=file_pointer)
                 string = str(i)+','+str(j)
                 dictionary[string] = ctr
@@ -800,7 +804,7 @@ def grad(ast, expression, variables, func = 'function',
     else:
         for i,vars_ in enumerate(variables):
             curr_base_variable = Variable(vars_)
-            derivative = Expr(fun)._forward_diff() 
+            derivative = Expr(fun,differentiate_pow_exp=differentiate_pow_exp)._forward_diff() 
             c_code._generate_expr(curr_base_variable._get(), derivative,index=i,file_pointer=file_pointer)        
 
     c_code._make_footer(file_pointer)
@@ -810,7 +814,8 @@ def grad(ast, expression, variables, func = 'function',
 
 def grad_with_split(ast, expression, variables, func = 'function', 
                           reverse_diff = False, second_der = False, output_filename = 'c_code',
-                          output_func = 'compute', split_by = 20, parallel = False, num_threads = 1):
+                          output_func = 'compute', split_by = 20, parallel = False, num_threads = 1,
+                          differentiate_pow_exp = True):
 
     """
     Returns a function which computes gradient of `fun` with respect to
@@ -939,7 +944,7 @@ def grad_with_split(ast, expression, variables, func = 'function',
                 curr_base_variable = Variable(vars_)
                 primary_base_variable = Variable(vars_)
 
-                derivative = Expr(fun)._forward_diff()  
+                derivative = Expr(fun,differentiate_pow_exp=differentiate_pow_exp)._forward_diff()  
 
                 derivative = simplify_equation(derivative)
 
@@ -953,7 +958,7 @@ def grad_with_split(ast, expression, variables, func = 'function',
                     curr_base_variable = Variable(vars_second)
                     secondary_base_variable = Variable(vars_second)
 
-                    second_derivative = Expr(new_ast.ext[0].init)._forward_diff()
+                    second_derivative = Expr(new_ast.ext[0].init,differentiate_pow_exp=differentiate_pow_exp)._forward_diff()
                     print("[{},{} / {}] Second derivative : df / d{} d{}:".format(i,j,len(variables),vars_, vars_second))
 
                     flattened_mat_idx = i*len(variables) + j
@@ -987,7 +992,7 @@ def grad_with_split(ast, expression, variables, func = 'function',
                 split_ctr += 1
                 
                 curr_base_variable = Variable(vars_)
-                derivative = Expr(fun)._forward_diff() 
+                derivative = Expr(fun,differentiate_pow_exp=differentiate_pow_exp)._forward_diff() 
 
                 c_code._generate_expr(curr_base_variable._get(), derivative, index=i, file_pointer = file_pointer)        
 
@@ -1006,7 +1011,7 @@ def grad_with_split(ast, expression, variables, func = 'function',
             ctr=0
             split_ctr = 0            
 
-            Expr(fun)._reverse_diff("1.",grad) 
+            Expr(fun,differentiate_pow_exp=differentiate_pow_exp)._reverse_diff("1.",grad) 
 
             for i,vars_ in enumerate(variables):
                 primary_base_variable = Variable(vars_)
@@ -1023,7 +1028,7 @@ def grad_with_split(ast, expression, variables, func = 'function',
                 for i_ctr, vars_ in enumerate(variables):
                     grad_hess[vars_] = '0'              
 
-                Expr(new_ast.ext[0].init)._reverse_diff("1.",grad_hess)
+                Expr(new_ast.ext[0].init,differentiate_pow_exp=differentiate_pow_exp)._reverse_diff("1.",grad_hess)
 
 
                 for j in range(i, len(variables)):
@@ -1062,7 +1067,7 @@ def grad_with_split(ast, expression, variables, func = 'function',
             ctr=0
             split_ctr = 0  
 
-            Expr(fun)._reverse_diff("1.",grad) 
+            Expr(fun,differentiate_pow_exp=differentiate_pow_exp)._reverse_diff("1.",grad) 
 
             for i,vars_ in enumerate(variables):
                 ctr += 1
@@ -1100,7 +1105,8 @@ def prepare_graph(function):
 
 def autodiff(function, expression, variables, func = 'function',
                 reverse_diff = False, second_der = False, output_filename = 'c_code',
-                output_func = 'compute', split=False, split_by=20):
+                output_func = 'compute', split=False, split_by=20,
+                differentiate_pow_exp=True):
 
 
     print(reverse_diff)
@@ -1109,13 +1115,11 @@ def autodiff(function, expression, variables, func = 'function',
     if split:
         grad_with_split(ast, expression, variables, func = func, 
             reverse_diff = reverse_diff, second_der = second_der, output_filename = output_filename, 
-            output_func = output_func, split_by=split_by)
+            output_func = output_func, split_by=split_by,differentiate_pow_exp=differentiate_pow_exp)
     else:
         grad(ast, expression, variables, func = func, 
             reverse_diff = reverse_diff, second_der = second_der, output_filename = output_filename, 
-            output_func = output_func)        
-
-
+            output_func = output_func, differentiate_pow_exp=differentiate_pow_exp)
 
 
 
@@ -1175,7 +1179,7 @@ def main():
     else:
         grad(ast, expression, variables, func = parser.func,
             reverse_diff = reverse_diff, second_der = second_der, output_filename = output_filename, 
-            output_func = output_func, parallel = parallel, num_threads = num_threads)       
+            output_func = output_func, parallel = parallel, num_threads = num_threads)
 
 
 
