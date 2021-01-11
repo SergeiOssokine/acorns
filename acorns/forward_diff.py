@@ -80,6 +80,8 @@ class Expr(pycparser.c_ast.Node):
                 return (self.__cos__())._reverse_diff(self, adjoint, grad)
             elif func == 'log':
                 return (self.__log__())._reverse_diff(self, adjoint, grad)
+            elif func == 'sqrt':
+                return (self.__sqrt__())._reverse_diff(self, adjoint, grad)
             else:
                 raise NotImplementedError
         else:
@@ -91,6 +93,8 @@ class Expr(pycparser.c_ast.Node):
                 return (self.__cos__())._forward_diff(self)
             elif func == 'log':
                 return (self.__log__())._forward_diff(self)
+            elif func == 'sqrt':
+                return (self.__sqrt__())._forward_diff(self)
             else:
                 raise NotImplementedError
 
@@ -117,6 +121,8 @@ class Expr(pycparser.c_ast.Node):
             return (self.__cos__())._eval(self)
         elif func == 'log':
             return (self.__log__())._eval(self)
+        elif func == 'sqrt':
+            return (self.__sqrt__())._eval(self)
         else:
             raise NotImplementedError
 
@@ -189,6 +195,9 @@ class Expr(pycparser.c_ast.Node):
     def __log__(self):
         return Log()
 
+    def __sqrt__(self):
+        return Sqrt()
+    
     def __variable__(self, name, subscript=None):
         return Variable(name, subscript)
 
@@ -409,6 +418,42 @@ class Pow(Expr):
         Expr(base)._reverse_diff( "(" + adjoint + ")"+ "*"+ "("+ exp_str+")"+" * " + "(pow(" + base_str +","+ "("+exp_str +"- 1)"+"))", grad)
         Expr(exp)._reverse_diff("(" +  adjoint + ")"+ "*"+ "log("+base_str+")" +" * " + "pow(" + base_str +"," + exp_str +")", grad)
 
+
+class Sqrt(Expr):
+    def __init__(self):
+        pass
+    def _eval(self,cur_node):
+        try:
+            arg = cur_node.ast.args.exprs[0].name
+        except:
+            arg = Expr(cur_node.ast.args.exprs[0]).eval()
+
+
+        return "(sqrt(%s))" % (Expr(arg).eval())
+
+    def _forward_diff(self,cur_node):
+        try:
+            arg = Expr(cur_node.ast.args.exprs[0].name)
+            arg_str = arg.eval()
+        except:
+            arg = Expr(cur_node.ast.args.exprs[0])
+            arg_str = arg.eval()
+
+        der_arg = arg._forward_diff()
+
+
+        return "(0.5/sqrt("+arg_str+")*("+der_arg+"))"
+
+
+    def _reverse_diff(self, cur_node, adjoint, grad):
+        try:
+            arg = cur_node.ast.args.exprs[0].name
+            arg_str = arg
+        except:
+            arg = Expr(cur_node.ast.args.exprs[0])
+            arg_str = arg.eval()
+
+        Expr(arg)._reverse_diff("(" + adjoint + ") * "+" (0.5/sqrt("+arg_str+"))", grad)
 
 class Sine(Expr):
     def __init__(self):
