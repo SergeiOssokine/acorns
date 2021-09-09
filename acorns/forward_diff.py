@@ -13,7 +13,7 @@ import pycparser.c_parser as c_parser
 # to do: using pow in reverse dif. might slow down.
 
 class Expr(pycparser.c_ast.Node):
-    def __init__(self,node,differentiate_pow_exp=True):
+    def __init__(self,node,differentiate_pow_exp=False):
         if isinstance(node, str):
             self.ast = node
             self.type = 'str'
@@ -21,7 +21,7 @@ class Expr(pycparser.c_ast.Node):
             self.ast = node
             self.type = node.__class__.__name__
         self.differentiate_pow_exp = differentiate_pow_exp
-
+        #print(f"Inside node: {self.differentiate_pow_exp}")
     def eval(self):
         if self.type=='UnaryOp':
             return self.eval_match_op()
@@ -37,12 +37,12 @@ class Expr(pycparser.c_ast.Node):
             return (self.__variable__(self.ast.value))._eval()
         elif self.type == 'ArrayRef':
             if self.ast.name.__class__.__name__ == 'ArrayRef':
-                return (self.__variable__(self.ast.name.name.name+'[{}]'.format(self.ast.name.subscript.value), self.ast.subscript.value))._eval() 
+                return (self.__variable__(self.ast.name.name.name+'[{}]'.format(self.ast.name.subscript.value), self.ast.subscript.value))._eval()
             else:
                 if self.ast.subscript.__class__.__name__ == 'BinaryOp' or self.ast.subscript.__class__.__name__ == 'ID':
-                    return (self.__variable__(self.ast.name.name, Expr(self.ast.subscript).eval()))._eval() 
+                    return (self.__variable__(self.ast.name.name, Expr(self.ast.subscript).eval()))._eval()
                 else:
-                    return (self.__variable__(self.ast.name.name, self.ast.subscript.value))._eval() 
+                    return (self.__variable__(self.ast.name.name, self.ast.subscript.value))._eval()
 
 
     def match_op(self, reverse = False,  adjoint = None, grad = {}):
@@ -140,12 +140,12 @@ class Expr(pycparser.c_ast.Node):
             return (self.__variable__(self.ast.value))._forward_diff()
         elif self.type == 'ArrayRef':
             if self.ast.name.__class__.__name__ == 'ArrayRef':
-                return (self.__variable__(self.ast.name.name.name+'[{}]'.format(self.ast.name.subscript.value), self.ast.subscript.value))._forward_diff() 
+                return (self.__variable__(self.ast.name.name.name+'[{}]'.format(self.ast.name.subscript.value), self.ast.subscript.value))._forward_diff()
             else:
                 if self.ast.subscript.__class__.__name__ == 'BinaryOp' or self.ast.subscript.__class__.__name__ == 'ID':
-                    return (self.__variable__(self.ast.name.name, Expr(self.ast.subscript).eval()))._forward_diff() 
+                    return (self.__variable__(self.ast.name.name, Expr(self.ast.subscript).eval()))._forward_diff()
                 else:
-                    return (self.__variable__(self.ast.name.name, self.ast.subscript.value))._forward_diff() 
+                    return (self.__variable__(self.ast.name.name, self.ast.subscript.value))._forward_diff()
 
 
 
@@ -160,16 +160,16 @@ class Expr(pycparser.c_ast.Node):
         elif self.type == 'ID':
             return (self.__variable__(self.ast.name))._reverse_diff(adjoint, grad)
         elif self.type == 'Constant':
-            return (self.__variable__(self.ast.value))._reverse_diff(adjoint, grad)     
-        elif self.type == 'ArrayRef':  
-            if self.ast.name.__class__.__name__ == 'ArrayRef':      
-                return (self.__variable__(self.ast.name.name.name+'[{}]'.format(self.ast.name.subscript.value), self.ast.subscript.value))._reverse_diff(adjoint, grad) 
+            return (self.__variable__(self.ast.value))._reverse_diff(adjoint, grad)
+        elif self.type == 'ArrayRef':
+            if self.ast.name.__class__.__name__ == 'ArrayRef':
+                return (self.__variable__(self.ast.name.name.name+'[{}]'.format(self.ast.name.subscript.value), self.ast.subscript.value))._reverse_diff(adjoint, grad)
             else:
                 if self.ast.subscript.__class__.__name__ == 'BinaryOp' or self.ast.subscript.__class__.__name__ == 'ID':
-                    return (self.__variable__(self.ast.name.name, Expr(self.ast.subscript).eval()))._reverse_diff(adjoint, grad) 
+                    return (self.__variable__(self.ast.name.name, Expr(self.ast.subscript).eval()))._reverse_diff(adjoint, grad)
                 else:
-                    return (self.__variable__(self.ast.name.name, self.ast.subscript.value))._reverse_diff(adjoint, grad) 
-                   
+                    return (self.__variable__(self.ast.name.name, self.ast.subscript.value))._reverse_diff(adjoint, grad)
+
 
 
     def __add__(self):
@@ -185,6 +185,7 @@ class Expr(pycparser.c_ast.Node):
         return Divide()
 
     def __pow__(self):
+        #print(self.differentiate_pow_exp)
         return Pow(self.differentiate_pow_exp)
 
     def __sin__(self):
@@ -198,7 +199,7 @@ class Expr(pycparser.c_ast.Node):
 
     def __sqrt__(self):
         return Sqrt()
-    
+
     def __variable__(self, name, subscript=None):
         return Variable(name, subscript)
 
@@ -344,7 +345,7 @@ class Log(Expr):
         return "(log("+Expr(exp).eval()+"))"
 
 
-    def _forward_diff(self,cur_node):   
+    def _forward_diff(self,cur_node):
         # skipped the try except - may break
         exp_eval = Expr(cur_node.ast.args.exprs[0]).eval()
         exp = cur_node.ast.args.exprs[0]
@@ -353,7 +354,7 @@ class Log(Expr):
     def _reverse_diff(self, cur_node, adjoint, grad):
         exp_eval = Expr(cur_node.ast.args.exprs[0]).eval()
         exp = cur_node.ast.args.exprs[0]
-        Expr(exp)._reverse_diff("(" + adjoint + ") * "+" (1/("+exp_eval+"))", grad)           
+        Expr(exp)._reverse_diff("(" + adjoint + ") * "+" (1/("+exp_eval+"))", grad)
 
 
 
@@ -612,7 +613,7 @@ def grad(ast, expression, variables, func = 'function',
     `fun` is expected to be scalar valued. The gradient has the same type as argument."""
     global ext_index
     fun = None
-
+    #print(f"Inside grad: {differentiate_pow_exp}")
     for funs in range(len(ast.ext)):
         if 'decl' not in  dir(ast.ext[funs]):
             continue
@@ -635,9 +636,9 @@ def grad(ast, expression, variables, func = 'function',
 
     else:
         if reverse_diff:
-            print('Computing Gradient with Reverse Differentiation')  
+            print('Computing Gradient with Reverse Differentiation')
         else:
-            print('Computing Gradient with Forward Differentiation')  
+            print('Computing Gradient with Forward Differentiation')
 
         c_code = c_generator.CGenerator(filename = output_filename, variable_count = len(variables), derivative_count = len(variables), parallel = parallel, num_threads = num_threads)
 
@@ -714,7 +715,7 @@ def grad(ast, expression, variables, func = 'function',
         file_pointer = c_code._declare_vars(vars_,i,file_pointer=file_pointer)
         grad[vars_] = '0'
 
-
+    toreturn = []
     if reverse_diff:
         if second_der:
             Expr(fun,differentiate_pow_exp=differentiate_pow_exp)._reverse_diff("1.",grad)
@@ -753,7 +754,7 @@ def grad(ast, expression, variables, func = 'function',
 
         else:
             Expr(fun,differentiate_pow_exp=differentiate_pow_exp)._reverse_diff("1.",grad)
-            
+
             i = 0
             for k,v in grad.items():
                 file_pointer=c_code._generate_expr(k, v,index=i, file_pointer=file_pointer)
@@ -779,6 +780,7 @@ def grad(ast, expression, variables, func = 'function',
                 secondary_base_variable = Variable(vars_second)
 
                 second_derivative = Expr(new_ast.ext[0].init,differentiate_pow_exp=differentiate_pow_exp)._forward_diff()
+                toreturn.append(second_derivative)
                 c_code._generate_expr([primary_base_variable._get(), secondary_base_variable._get()], second_derivative,index=ctr, file_pointer=file_pointer)
                 string = str(i)+','+str(j)
                 dictionary[string] = ctr
@@ -804,22 +806,23 @@ def grad(ast, expression, variables, func = 'function',
     else:
         for i,vars_ in enumerate(variables):
             curr_base_variable = Variable(vars_)
-            derivative = Expr(fun,differentiate_pow_exp=differentiate_pow_exp)._forward_diff() 
-            c_code._generate_expr(curr_base_variable._get(), derivative,index=i,file_pointer=file_pointer)        
+            derivative = Expr(fun,differentiate_pow_exp=differentiate_pow_exp)._forward_diff()
+            c_code._generate_expr(curr_base_variable._get(), derivative,index=i,file_pointer=file_pointer)
+            toreturn.append(derivative)
 
     c_code._make_footer(file_pointer)
-        
+    return toreturn
 
 
 
-def grad_with_split(ast, expression, variables, func = 'function', 
+def grad_with_split(ast, expression, variables, func = 'function',
                           reverse_diff = False, second_der = False, output_filename = 'c_code',
                           output_func = 'compute', split_by = 20, parallel = False, num_threads = 1,
                           differentiate_pow_exp = True):
 
     """
     Returns a function which computes gradient of `fun` with respect to
-    positional argument number `x`. The returned function takes the 
+    positional argument number `x`. The returned function takes the
     same arguments as `fun` , but returns the gradient instead. The function
     `fun` is expected to be scalar valued. The gradient has the same type as argument."""
     global ext_index
@@ -842,14 +845,14 @@ def grad_with_split(ast, expression, variables, func = 'function',
         print('Computing Hessian with Reverse Differentiation')
         c_code = c_generator.CGenerator(filename = output_filename+'0', variable_count = len(variables), derivative_count = len(variables)*len(variables), split=True, parallel = parallel, num_threads = num_threads)
     elif (not reverse_diff and second_der):
-        print('Computing Hessian with Forward Differentiation')        
+        print('Computing Hessian with Forward Differentiation')
         c_code = c_generator.CGenerator(filename = output_filename+'0', variable_count = len(variables), derivative_count = (len(variables)*(len(variables))), split=True, parallel = parallel, num_threads = num_threads)
 
     else:
         if reverse_diff:
-            print('Computing Gradient with Reverse Differentiation')  
+            print('Computing Gradient with Reverse Differentiation')
         else:
-            print('Computing Gradient with Forward Differentiation')  
+            print('Computing Gradient with Forward Differentiation')
 
         c_code = c_generator.CGenerator(filename = output_filename+'0', variable_count = len(variables), derivative_count = len(variables), split=True, parallel = parallel, num_threads = num_threads)
     file_pointer = open(output_filename+'0.c','a')
@@ -865,7 +868,7 @@ def grad_with_split(ast, expression, variables, func = 'function',
                 while arr.__class__.__name__!="TypeDecl":
                     expr_name += "[{}]".format(arr.dim.value)
                     arr = arr.type
-                expr_name = arr.declname+expr_name            
+                expr_name = arr.declname+expr_name
             else:
                 expr_name = ast.ext[ext_index].body.block_items[blocks].name
 
@@ -873,11 +876,11 @@ def grad_with_split(ast, expression, variables, func = 'function',
                 substite_in_fun = ast.ext[ext_index].body.block_items[blocks].init
                 dict_[expr_name] = expand_equation(substite_in_fun, dict_)
             else:
-                dict_[expr_name] = expand_equation(ast.ext[ext_index].body.block_items[blocks].init, dict_)     
-                
+                dict_[expr_name] = expand_equation(ast.ext[ext_index].body.block_items[blocks].init, dict_)
+
 
             if expr_name != expression:
-                continue       
+                continue
 
 
             fun = dict_[expr_name]
@@ -904,7 +907,7 @@ def grad_with_split(ast, expression, variables, func = 'function',
                 dict_[expr_name] = expand_equation(substite_in_fun, dict_)
             else:
                 dict_[expr_name] = expand_equation(ast.ext[ext_index].body.block_items[blocks].rvalue, dict_)
-            
+
 
             if expr_name != expression:
                 continue
@@ -927,24 +930,24 @@ def grad_with_split(ast, expression, variables, func = 'function',
 
             grad = {}
             for i, vars_ in enumerate(variables):
-                grad[vars_] = ''            
+                grad[vars_] = ''
 
 
             ctr=0
-            split_ctr = 0            
+            split_ctr = 0
 
 
             # matrix size: i x j
             # matrix size flattened : i*j values
 
-            # produce sub arrays after splitting          
-            
+            # produce sub arrays after splitting
+
 
             for i,vars_ in enumerate(variables):
                 curr_base_variable = Variable(vars_)
                 primary_base_variable = Variable(vars_)
 
-                derivative = Expr(fun,differentiate_pow_exp=differentiate_pow_exp)._forward_diff()  
+                derivative = Expr(fun,differentiate_pow_exp=differentiate_pow_exp)._forward_diff()
 
                 derivative = simplify_equation(derivative)
 
@@ -973,10 +976,10 @@ def grad_with_split(ast, expression, variables, func = 'function',
                         tmp = int(ctr//split_by)
                         print("Splitting file . Producing file ",tmp)
                         c_code._make_footer(file_pointer)
-                        
-                        
+
+
                         if not (i==(len(variables)-1) and j==(len(variables)-1)):
-                            c_code = c_generator.CGenerator(filename = output_filename+str(tmp), variable_count = len(variables), 
+                            c_code = c_generator.CGenerator(filename = output_filename+str(tmp), variable_count = len(variables),
                                 derivative_count = (len(variables)*(len(variables))), split=True, parallel = parallel, num_threads = num_threads)
                             file_pointer = open(output_filename+str(tmp)+'.c','a')
                             file_pointer = c_code._make_header(output_func, file_pointer)
@@ -985,16 +988,16 @@ def grad_with_split(ast, expression, variables, func = 'function',
                         split_ctr = 0
         else:
             ctr=0
-            split_ctr = 0  
-            
+            split_ctr = 0
+
             for i,vars_ in enumerate(variables):
                 ctr += 1
                 split_ctr += 1
-                
-                curr_base_variable = Variable(vars_)
-                derivative = Expr(fun,differentiate_pow_exp=differentiate_pow_exp)._forward_diff() 
 
-                c_code._generate_expr(curr_base_variable._get(), derivative, index=i, file_pointer = file_pointer)        
+                curr_base_variable = Variable(vars_)
+                derivative = Expr(fun,differentiate_pow_exp=differentiate_pow_exp)._forward_diff()
+
+                c_code._generate_expr(curr_base_variable._get(), derivative, index=i, file_pointer = file_pointer)
 
         if not job_finished:
             c_code._make_footer(file_pointer)
@@ -1005,13 +1008,13 @@ def grad_with_split(ast, expression, variables, func = 'function',
         grad = {}
         for i, vars_ in enumerate(variables):
             # c_code._declare_vars(vars_,i)
-            grad[vars_] = '0'        
+            grad[vars_] = '0'
 
         if second_der:
             ctr=0
-            split_ctr = 0            
+            split_ctr = 0
 
-            Expr(fun,differentiate_pow_exp=differentiate_pow_exp)._reverse_diff("1.",grad) 
+            Expr(fun,differentiate_pow_exp=differentiate_pow_exp)._reverse_diff("1.",grad)
 
             for i,vars_ in enumerate(variables):
                 primary_base_variable = Variable(vars_)
@@ -1026,7 +1029,7 @@ def grad_with_split(ast, expression, variables, func = 'function',
 
                 grad_hess = {}
                 for i_ctr, vars_ in enumerate(variables):
-                    grad_hess[vars_] = '0'              
+                    grad_hess[vars_] = '0'
 
                 Expr(new_ast.ext[0].init,differentiate_pow_exp=differentiate_pow_exp)._reverse_diff("1.",grad_hess)
 
@@ -1037,7 +1040,7 @@ def grad_with_split(ast, expression, variables, func = 'function',
                     v_hess = grad_hess[k_hess]
 
                     secondary_base_variable = Variable(k_hess)
-                    
+
 
                     print("[{},{} / {}] Second derivative : df / d{} d{}:".format(i,j,len(variables),k, k_hess))
 
@@ -1051,28 +1054,28 @@ def grad_with_split(ast, expression, variables, func = 'function',
 
                         c_code._make_footer(file_pointer)
 
-                        
-                        
+
+
                         if not (i==(len(variables)-1) and j==(len(variables)-1)):
 
-                            c_code = c_generator.CGenerator(filename = output_filename+str(tmp), variable_count = len(variables), 
-                                derivative_count = (len(variables)*(len(variables))), split=True, parallel = parallel, num_threads = num_threads)                            
+                            c_code = c_generator.CGenerator(filename = output_filename+str(tmp), variable_count = len(variables),
+                                derivative_count = (len(variables)*(len(variables))), split=True, parallel = parallel, num_threads = num_threads)
                             file_pointer = open(output_filename+str(tmp)+'.c','a')
                             file_pointer = c_code._make_header(output_func, file_pointer)
                             job_finished = True
 
-                        split_ctr = 0      
+                        split_ctr = 0
 
         else:
             ctr=0
-            split_ctr = 0  
+            split_ctr = 0
 
-            Expr(fun,differentiate_pow_exp=differentiate_pow_exp)._reverse_diff("1.",grad) 
+            Expr(fun,differentiate_pow_exp=differentiate_pow_exp)._reverse_diff("1.",grad)
 
             for i,vars_ in enumerate(variables):
                 ctr += 1
                 split_ctr += 1
-                
+
                 curr_base_variable = Variable(vars_)
                 v_grad = grad[vars_]
 
@@ -1109,19 +1112,20 @@ def autodiff(function, expression, variables, func = 'function',
                 differentiate_pow_exp=True):
 
 
-    print(reverse_diff)
+    print("Inside autodiff")
 
     ast = prepare_graph(function)
     if split:
-        grad_with_split(ast, expression, variables, func = func, 
-            reverse_diff = reverse_diff, second_der = second_der, output_filename = output_filename, 
+        grad_with_split(ast, expression, variables, func = func,
+            reverse_diff = reverse_diff, second_der = second_der, output_filename = output_filename,
             output_func = output_func, split_by=split_by,differentiate_pow_exp=differentiate_pow_exp)
     else:
-        grad(ast, expression, variables, func = func, 
-            reverse_diff = reverse_diff, second_der = second_der, output_filename = output_filename, 
+        print("Here")
+        toreturn = grad(ast, expression, variables, func = func,
+            reverse_diff = reverse_diff, second_der = second_der, output_filename = output_filename,
             output_func = output_func, differentiate_pow_exp=differentiate_pow_exp)
-
-
+        print(toreturn)
+    return toreturn
 
 def main():
     parser = argparse.ArgumentParser()
@@ -1174,11 +1178,11 @@ def main():
 
     if split:
         grad_with_split(ast, expression, variables, func = parser.func,
-            reverse_diff = reverse_diff, second_der = second_der, output_filename = output_filename, 
+            reverse_diff = reverse_diff, second_der = second_der, output_filename = output_filename,
             output_func = output_func, split_by=split_by, parallel = parallel, num_threads = num_threads)
     else:
         grad(ast, expression, variables, func = parser.func,
-            reverse_diff = reverse_diff, second_der = second_der, output_filename = output_filename, 
+            reverse_diff = reverse_diff, second_der = second_der, output_filename = output_filename,
             output_func = output_func, parallel = parallel, num_threads = num_threads)
 
 
